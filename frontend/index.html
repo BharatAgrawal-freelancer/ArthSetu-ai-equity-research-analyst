@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Equity Research Agent</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+
+/* Header */
+.header {background: #0c0d10; border-bottom: 1px solid #2d3148; padding: 0 2rem; height: 74px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+.logo { display: flex; flex-direction: column; }
+.logo-title { font-size: 20px; font-weight: 700; color: #f1f3f9; letter-spacing: -0.3px; }
+.logo-sub { font-size: 13px; color: #64748b; margin-top: 1px; }
+.form-row { display: flex; gap: 10px; align-items: center; }
+.form-row input, .form-row select { height: 38px; border: 1px solid #2d3148; border-radius: 8px; padding: 0 12px; font-size: 13px; background: #252836; color: #e2e8f0; outline: none; transition: border-color 0.15s; }
+.form-row input:focus, .form-row select:focus { border-color: #4f6ef7; box-shadow: 0 0 0 3px rgba(79,110,247,0.15); }
+.ticker-input { width: 110px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; }
+.sector-select { width: 190px; }
+.beta-input { width: 100px; }
+.offline-label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; cursor: pointer; white-space: nowrap; }
+.offline-label input { width: 14px; height: 14px; cursor: pointer; accent-color: #4f6ef7; }
+.key-wrap { position: relative; display: flex; align-items: center; }
+.key-input { width: 185px; }
+.key-hint { position: absolute; top: calc(100% + 2px); left: 2px; font-size: 10px; color: #475569; white-space: nowrap; }
+.key-hint a { color: #64748b; text-decoration: underline; text-underline-offset: 2px; }
+.key-hint a:hover { color: #4f6ef7; }
+.btn-analyze { height: 32px; padding: 0 15px; background: #1d295d; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s, transform 0.1s; letter-spacing: 0.02em; }
+.btn-analyze:hover { background: #0e132a; }
+.btn-analyze:active { transform: scale(0.98); }
+.btn-analyze:disabled { background: #2d3148; color: #64748b; cursor: not-allowed; transform: none; }
+
+/* Main */
+.main { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+
+/* Empty state */
+.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 65vh; gap: 14px; text-align: center; }
+.empty-icon { font-size: 52px; opacity: 0.25; }
+.empty h2 { font-size: 18px; font-weight: 500; color: #94a3b8; }
+.empty p { font-size: 13px; color: #475569; max-width: 380px; line-height: 1.7; }
+.empty-hint { background: #1a1d27; border: 1px solid #2d3148; border-radius: 8px; padding: 10px 16px; font-size: 12px; color: #64748b; margin-top: 4px; }
+
+/* Loading */
+.loading { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 65vh; gap: 18px; }
+.spinner { width: 38px; height: 38px; border: 3px solid #2d3148; border-top-color: #4f6ef7; border-radius: 50%; animation: spin 0.75s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading h2 { font-size: 16px; font-weight: 500; color: #94a3b8; }
+.loading p { font-size: 13px; color: #475569; }
+.loading-steps { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; background: #1a1d27; border: 1px solid #2d3148; border-radius: 10px; padding: 14px 18px; }
+.step { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #475569; }
+.step.active { color: #4f6ef7; }
+.step.done { color: #22c55e; }
+.step-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.step.active .step-dot { animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* Error */
+.error-box { background: #1f1215; border: 1px solid #4b1c1c; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+.error-box strong { color: #f87171; font-size: 14px; }
+.error-box p { color: #ef4444; font-size: 13px; margin-top: 4px; line-height: 1.5; }
+
+/* Verdict strip */
+.verdict-strip { display: grid; grid-template-columns: 2.2fr 1fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.verdict-card { border-radius: 12px; padding: 1.1rem 1.4rem; }
+.verdict-card.undervalued { background: #0d2b1a; border: 1px solid #1a4731; }
+.verdict-card.overvalued { background: #2b0d0d; border: 1px solid #4b1c1c; }
+.verdict-card.fairly { background: #2b220d; border: 1px solid #4b370d; }
+.verdict-big { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+.undervalued .verdict-big { color: #4ade80; }
+.overvalued .verdict-big { color: #f87171; }
+.fairly .verdict-big { color: #fbbf24; }
+.verdict-company { font-size: 12px; color: #64748b; margin-top: 4px; }
+.verdict-safety { font-size: 12px; margin-top: 12px; font-weight: 500; }
+.undervalued .verdict-safety { color: #4ade80; }
+.overvalued .verdict-safety { color: #f87171; }
+.fairly .verdict-safety { color: #fbbf24; }
+.metric-card { background: #0c0d10; border: 1px solid #2d3148; border-radius: 12px; padding: 1rem 1.1rem; }
+.metric-label { font-size: 11px; color: #475569; margin-bottom: 6px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em; }
+.metric-value { font-size: 24px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.5px; }
+.metric-sub { font-size: 11px; color: #475569; margin-top: 4px; }
+
+/* 2x2 grid */
+.main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 1.1rem 1.4rem; }
+.card-title { font-size: 11px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
+
+/* Ratio rows */
+.ratio-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid #1e2235; font-size: 13px; }
+.ratio-row:last-child { border-bottom: none; }
+.ratio-name { color: #94a3b8; }
+.ratio-val { font-weight: 600; color: #f1f5f9; }
+
+/* FCF bars */
+.bar-wrap { margin: 8px 0; }
+.bar-label { display: flex; justify-content: space-between; font-size: 12px; color: #64748b; margin-bottom: 5px; }
+.bar-track { height: 6px; background: #252836; border-radius: 3px; overflow: hidden; }
+.bar-fill { height: 6px; border-radius: 3px; transition: width 1s ease; }
+.bar-fill.good { background: #22c55e; }
+.bar-fill.warn { background: #f59e0b; }
+.fcf-divider { border-top: 1px solid #1e2235; margin: 12px 0 10px; }
+
+/* Cost of capital */
+.wacc-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: 13px; border-bottom: 1px solid #1e2235; }
+.wacc-row:last-child { border-bottom: none; }
+.wacc-name { color: #94a3b8; font-family: "SF Mono", "Fira Code", monospace; font-size: 12px; }
+.wacc-val { font-weight: 600; color: #f1f5f9; }
+.wacc-val.accent { color: #60a5fa; }
+
+/* Sensitivity table */
+.sens-note { font-size: 11px; color: #475569; margin-bottom: 10px; }
+.sens-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sens-table th { background: #252836; color: #64748b; font-weight: 500; padding: 7px 8px; text-align: center; border: 1px solid #2d3148; }
+.sens-table td { padding: 8px; text-align: center; border: 1px solid #2d3148; color: #94a3b8; }
+.sens-table td.base { background: #1e3a5f; color: #60a5fa; font-weight: 700; }
+.sens-table td.high { background: #0d2b1a; color: #4ade80; }
+.sens-table td.null-cell { color: #2d3148; font-style: italic; }
+.sens-table td.row-header { background: #252836; color: #64748b; font-weight: 500; text-align: left; padding-left: 10px; }
+
+/* Tag */
+.tag { display: inline-block; background: #252836; border: 1px solid #2d3148; border-radius: 4px; font-size: 10px; color: #475569; padding: 3px 9px; margin-top: 10px; }
+
+/* Full report */
+.report-toggle { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; overflow: hidden; margin-top: 10px; }
+.report-toggle-header { padding: 14px 1.4rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+.report-toggle-header:hover { background: #252836; }
+.report-toggle-title { font-size: 13px; font-weight: 500; color: #94a3b8; }
+.report-body { padding: 0 1.4rem 1.4rem; border-top: 1px solid #1e2235; display: none; }
+.report-body.open { display: block; }
+.report-body pre { font-size: 12px; color: #64748b; line-height: 1.8; white-space: pre-wrap; font-family: inherit; margin-top: 1rem; }
+
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">
+    <div class="logo-title">Equity Research Agent</div>
+    <div class="logo-sub">AI-powered DCF valuation</div>
+  </div>
+  <div class="form-row">
+    <input class="ticker-input" id="ticker" type="text" placeholder="TICKER" value="CIPLA" />
+    <select class="sector-select" id="sector">
+      <option value="pharmaceuticals">Pharmaceuticals</option>
+      <option value="it">Information Technology</option>
+      <option value="banking">Banking</option>
+      <option value="fmcg">FMCG</option>
+      <option value="automobiles">Automobiles</option>
+      <option value="oil_gas">Oil & Gas</option>
+      <option value="telecom">Telecom</option>
+      <option value="metals">Metals</option>
+      <option value="cement">Cement</option>
+      <option value="power">Power</option>
+      <option value="healthcare">Healthcare</option>
+      <option value="e_commerce">E-Commerce & Tech</option>
+    </select>
+    <input class="beta-input" id="beta" type="text" placeholder="β (optional)" />
+    <div class="key-wrap" id="keyWrap">
+      <input class="key-input" id="groqKey" type="password" placeholder="Groq API Key (optional)" autocomplete="off" spellcheck="false" />
+      <div class="key-hint">Get free key at <a href="https://console.groq.com" target="_blank" rel="noopener">console.groq.com</a></div>
+    </div>
+    <label class="offline-label">
+      <input type="checkbox" id="offline" /> Offline demo
+    </label>
+    <button class="btn-analyze" id="analyzeBtn" onclick="runAnalysis()">Analyze</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="empty" id="emptyState">
+    <!-- <div class="empty-icon">📊</div> -->
+    <h2>Enter a ticker to get started</h2>
+    <p>Supports NSE-listed equities. Live analysis takes 3–4 minutes using a 4-agent ADK pipeline with deterministic Python calculators.</p>
+    <div class="empty-hint"> Check "Offline demo" for an instant Cipla report without API calls</div>
+  </div>
+
+  <div class="loading hidden" id="loadingState">
+    <div class="spinner"></div>
+    <h2 id="loadingTitle">Analyzing CIPLA...</h2>
+    <p>4-agent pipeline · deterministic calculations · no LLM math</p>
+    <div class="loading-steps">
+      <div class="step" id="step1"><div class="step-dot"></div>Fetching live financial data via MCP server</div>
+      <div class="step" id="step2"><div class="step-dot"></div>Running ratio analysis + FCFF/FCFE cross-validation</div>
+      <div class="step" id="step3"><div class="step-dot"></div>Computing WACC, Ke (CAPM), DCF valuation</div>
+      <div class="step" id="step4"><div class="step-dot"></div>Generating equity research report</div>
+    </div>
+  </div>
+
+  <div class="error-box hidden" id="errorBox">
+    <strong>Analysis failed</strong>
+    <p id="errorMsg"></p>
+  </div>
+
+  <div class="hidden" id="dashboard">
+    <div class="verdict-strip">
+      <div class="verdict-card" id="verdictCard">
+        <div class="verdict-big" id="verdictText">—</div>
+        <div class="verdict-company" id="verdictCompany">—</div>
+        <div class="verdict-safety" id="verdictSafety"></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Intrinsic price</div>
+        <div class="metric-value" id="intrinsicPrice">—</div>
+        <div class="metric-sub">DCF / FCFE method</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Market price</div>
+        <div class="metric-value" id="marketPrice">—</div>
+        <div class="metric-sub">NSE current</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">WACC</div>
+        <div class="metric-value" id="waccVal">—</div>
+        <div class="metric-sub" id="betaUsed">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Ke (CAPM)</div>
+        <div class="metric-value" id="keVal">—</div>
+        <div class="metric-sub">Rf + β × ERP</div>
+      </div>
+    </div>
+
+    <div class="main-grid">
+      <div class="card">
+        <div class="card-title">Financial ratios</div>
+        <div id="ratioRows"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Free cash flow</div>
+        <div id="fcfBars"></div>
+      </div>
+    </div>
+
+    <div class="main-grid">
+      <div class="card">
+        <div class="card-title">Cost of capital</div>
+        <div id="waccRows"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Sensitivity analysis — intrinsic price (₹)</div>
+        <div class="sens-note">Rows = cost of equity · Columns = terminal growth rate</div>
+        <div id="sensTable"></div>
+        <div class="tag">Base case highlighted · — = Gordon Growth undefined</div>
+      </div>
+    </div>
+
+    <div class="report-toggle">
+      <div class="report-toggle-header" onclick="toggleReport()">
+        <span class="report-toggle-title">📄 Full equity research report</span>
+        <span id="toggleArrow" style="color:#475569">▼</span>
+      </div>
+      <div class="report-body" id="reportBody">
+        <pre id="reportText"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let reportOpen = false;
+function toggleReport() {
+  reportOpen = !reportOpen;
+  document.getElementById('reportBody').classList.toggle('open', reportOpen);
+  document.getElementById('toggleArrow').textContent = reportOpen ? '▲' : '▼';
+}
+function fmt(n, d=2) {
+  if (n==null||isNaN(n)) return '—';
+  return Number(n).toLocaleString('en-IN',{maximumFractionDigits:d,minimumFractionDigits:d});
+}
+function pct(n) {
+  if (n==null||isNaN(n)) return '—';
+  return (Number(n)*100).toFixed(2)+'%';
+}
+function animateSteps(offline) {
+  const steps=['step1','step2','step3','step4'];
+  const delays=offline?[0,200,400,600]:[0,65000,130000,195000];
+  steps.forEach((id,i)=>{
+    setTimeout(()=>{
+      if(i>0) document.getElementById(steps[i-1]).className='step done';
+      document.getElementById(id).className='step active';
+    },delays[i]);
+  });
+}
+async function runAnalysis() {
+  const ticker=document.getElementById('ticker').value.trim().toUpperCase();
+  const sector=document.getElementById('sector').value;
+  const beta=document.getElementById('beta').value.trim();
+  const offline=document.getElementById('offline').checked;
+  if(!ticker){alert('Please enter a ticker symbol.');return;}
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('dashboard').classList.add('hidden');
+  document.getElementById('errorBox').classList.add('hidden');
+  document.getElementById('loadingState').classList.remove('hidden');
+  document.getElementById('loadingTitle').textContent='Analyzing '+ticker+'...';
+  document.getElementById('analyzeBtn').disabled=true;
+  ['step1','step2','step3','step4'].forEach(id=>document.getElementById(id).className='step');
+  animateSteps(offline);
+  try {
+    const body={ticker,sector,offline};
+    if(beta) body.beta=parseFloat(beta);
+    const groqKey=document.getElementById('groqKey').value.trim();
+    if(groqKey&&!offline) body.groq_api_key=groqKey;
+    const res=await fetch('/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.detail||JSON.stringify(data));
+    renderDashboard(data);
+  } catch(err) {
+    document.getElementById('loadingState').classList.add('hidden');
+    document.getElementById('errorBox').classList.remove('hidden');
+    document.getElementById('errorMsg').textContent=err.message;
+  } finally {
+    document.getElementById('analyzeBtn').disabled=false;
+  }
+}
+function renderDashboard(data) {
+  document.getElementById('loadingState').classList.add('hidden');
+  document.getElementById('dashboard').classList.remove('hidden');
+  const verdict=(data.verdict||'N/A').toLowerCase();
+  const vc=document.getElementById('verdictCard');
+  vc.className='verdict-card '+(verdict.includes('under')?'undervalued':verdict.includes('over')?'overvalued':'fairly');
+  document.getElementById('verdictText').textContent=data.verdict||'N/A';
+  document.getElementById('verdictCompany').textContent=(data.company_name||data.ticker||'')+(data.fiscal_year_end?' · '+data.fiscal_year_end:'');
+  const ip=parseFloat(data.intrinsic_share_price);
+  const mp=parseFloat(data.market_price);
+  if(ip&&mp&&mp>0){
+    const safety=Math.abs((ip-mp)/mp*100).toFixed(1);
+    document.getElementById('verdictSafety').textContent=safety+'% margin of safety vs market price';
+  }
+  document.getElementById('intrinsicPrice').textContent=ip?'₹'+fmt(ip,0):'—';
+  document.getElementById('marketPrice').textContent=mp?'₹'+fmt(mp,0):'—';
+  const wacc=parseFloat(data.wacc);
+  const ke=parseFloat(data.ke);
+  document.getElementById('waccVal').textContent=wacc?pct(wacc):'—';
+  document.getElementById('keVal').textContent=ke?pct(ke):'—';
+  document.getElementById('betaUsed').textContent=data.beta?'Beta '+data.beta:'Beta from yfinance';
+  const ratios=data.ratios||{};
+  const ratioMap=[
+    ['Current ratio',ratios.current_ratio],
+    ['Quick ratio',ratios.quick_ratio],
+    ['Interest coverage',ratios.interest_coverage?fmt(ratios.interest_coverage,1)+'×':null],
+    ['Gross profit margin',ratios.gross_profit_margin?pct(ratios.gross_profit_margin):null],
+    ['Net profit margin',ratios.net_profit_margin?pct(ratios.net_profit_margin):null],
+    ['ROE',ratios.return_on_equity?pct(ratios.return_on_equity):null],
+    ['Debt-to-equity',ratios.debt_to_equity],
+    ['Asset turnover',ratios.asset_turnover],
+  ];
+  document.getElementById('ratioRows').innerHTML=ratioMap.filter(([,v])=>v!=null).map(([k,v])=>`<div class="ratio-row"><span class="ratio-name">${k}</span><span class="ratio-val">${typeof v==='number'?fmt(v):v}</span></div>`).join('');
+  const fcf=data.cashflows||{};
+  const f1=parseFloat(fcf.fcff_m1)||0,f2=parseFloat(fcf.fcff_m2)||0,f3=parseFloat(fcf.fcff_m3)||0;
+  const mx=Math.max(f1,f2,f3,1);
+  const outlier=f3<mx*0.5;
+  document.getElementById('fcfBars').innerHTML=`
+    <div class="bar-wrap"><div class="bar-label"><span>FCFF method 1 (net income)</span><span>${fmt(f1,0)} cr</span></div><div class="bar-track"><div class="bar-fill good" style="width:${(f1/mx*100).toFixed(0)}%"></div></div></div>
+    <div class="bar-wrap"><div class="bar-label"><span>FCFF method 2 (NOPAT)</span><span>${fmt(f2,0)} cr</span></div><div class="bar-track"><div class="bar-fill good" style="width:${(f2/mx*100).toFixed(0)}%"></div></div></div>
+    <div class="bar-wrap"><div class="bar-label"><span>FCFF method 3 (CFO)</span><span>${fmt(f3,0)} cr</span></div><div class="bar-track"><div class="bar-fill ${outlier?'warn':'good'}" style="width:${(f3/mx*100).toFixed(0)}%"></div></div></div>
+    <div class="fcf-divider"></div>
+    <div class="ratio-row"><span class="ratio-name">Validated FCFF (best estimate)</span><span class="ratio-val">${fmt(fcf.validated_fcff,0)} cr</span></div>
+    <div class="ratio-row"><span class="ratio-name">Validated FCFE</span><span class="ratio-val">${fmt(fcf.validated_fcfe,0)} cr</span></div>
+    <div class="tag">3-method cross-validation · ${outlier?'⚠ Method 3 diverges — using best estimate':'✓ Methods agree'}</div>`;
+  const coc=data.cost_of_capital||{};
+  document.getElementById('waccRows').innerHTML=`
+    <div class="wacc-row"><span class="wacc-name">Rf (risk-free rate)</span><span class="wacc-val">${pct(coc.risk_free_rate)}</span></div>
+    <div class="wacc-row"><span class="wacc-name">β (beta)</span><span class="wacc-val">${coc.beta||'—'}</span></div>
+    <div class="wacc-row"><span class="wacc-name">Rm (market return)</span><span class="wacc-val">${pct(coc.market_return)}</span></div>
+    <div class="wacc-row"><span class="wacc-name">Ke = Rf + β×(Rm−Rf)</span><span class="wacc-val accent">${pct(coc.ke)}</span></div>
+    <div class="wacc-row"><span class="wacc-name">Kd (post-tax)</span><span class="wacc-val">${pct(coc.kd)}</span></div>
+    <div class="wacc-row"><span class="wacc-name">Wd / We</span><span class="wacc-val">${coc.wd?(coc.wd*100).toFixed(1)+'% / '+(coc.we*100).toFixed(1)+'%':'—'}</span></div>
+    <div class="wacc-row"><span class="wacc-name">WACC</span><span class="wacc-val accent">${pct(coc.wacc)}</span></div>`;
+  const sens=data.sensitivity||{};
+  const keKeys=Object.keys(sens).sort();
+  if(keKeys.length>0){
+    const tgKeys=Object.keys(sens[keKeys[0]]||{}).sort();
+    const baseKe=data.ke?parseFloat(data.ke):null;
+    const baseTg=data.terminal_growth_rate?parseFloat(data.terminal_growth_rate):null;
+    let html='<table class="sens-table"><thead><tr><th>Ke \\ Tg</th>';
+    tgKeys.forEach(tg=>html+=`<th>${(parseFloat(tg)*100).toFixed(1)}%</th>`);
+    html+='</tr></thead><tbody>';
+    keKeys.forEach(ke=>{
+      html+=`<tr><td class="row-header">${(parseFloat(ke)*100).toFixed(1)}%</td>`;
+      tgKeys.forEach(tg=>{
+        const val=sens[ke]?.[tg];
+        const isBase=baseKe&&Math.abs(parseFloat(ke)-baseKe)<0.001&&baseTg&&Math.abs(parseFloat(tg)-baseTg)<0.001;
+        const isNull=val==null;
+        const isHigh=val&&parseFloat(data.intrinsic_share_price)&&val>parseFloat(data.intrinsic_share_price)*2.5;
+        const cls=isBase?'base':isNull?'null-cell':isHigh?'high':'';
+        html+=`<td class="${cls}">${isNull?'—':'₹'+fmt(val,0)}</td>`;
+      });
+      html+='</tr>';
+    });
+    html+='</tbody></table>';
+    document.getElementById('sensTable').innerHTML=html;
+  }
+  document.getElementById('reportText').textContent=data.report||'';
+}
+document.addEventListener('keydown',e=>{if(e.key==='Enter')runAnalysis();});
+// The BYO key only applies to live runs — hide it while "Offline demo" is checked.
+document.getElementById('offline').addEventListener('change',e=>{
+  document.getElementById('keyWrap').classList.toggle('hidden',e.target.checked);
+});
+</script>
+</body>
+</html>

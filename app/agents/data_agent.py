@@ -1,0 +1,71 @@
+"""Data agent — fetches all financial data via the financial-data MCP server.
+
+The data source is the FastMCP server in app/mcp/financial_data_server.py, launched
+as a stdio subprocess and connected through ADK's MCPToolset. The agent calls the
+server's `fetch_all_financial_data` tool — a genuine MCP tool call, not a direct
+Python invocation of the provider.
+"""
+import os
+from pathlib import Path
+
+from google.adk.agents import LlmAgent
+from google.adk.models.lite_llm import LiteLlm
+from google.adk.tools.mcp_tool.mcp_toolset import (
+    MCPToolset,
+    StdioConnectionParams,
+    StdioServerParameters,
+)
+from app.agents.tpm_pacer import cooldown_before_agent, mark_llm_activity
+
+# Project root so the MCP server subprocess can import the `app` package when
+# launched via `python3 -m app.mcp.financial_data_server` (cwd is added to sys.path).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# Connect to the financial-data MCP server over stdio. Only the aggregating
+# `fetch_all_financial_data` tool is exposed to this agent (the server also
+# offers the three lower-level tools, which this agent does not need).
+financial_data_mcp = MCPToolset(
+    connection_params=StdioConnectionParams(
+        server_params=StdioServerParameters(
+            command="python3",
+            args=["-m", "app.mcp.financial_data_server"],
+            cwd=str(_PROJECT_ROOT),
+        ),
+        timeout=120.0,
+    ),
+    tool_filter=["fetch_all_financial_data"],
+)
+
+
+def create_data_agent(beta_override: float = 0.0) -> LlmAgent:
+    instruction = f"""Call fetch_all_financial_data(ticker, sector) EXACTLY ONCE.
+Use the ticker and sector from the user message.
+Extract the beta_override value ({beta_override}) and pass it \
+as the beta_override argument to fetch_all_financial_data.
+After the tool returns, immediately output the clean inner JSON object it returned.
+CRITICAL: The tool returns a wrapper structure like {{"content": [{{"text": "{{...}}"}}]}}.
+You MUST extract and output ONLY the clean, unescaped inner JSON object starting with {{"ticker": ...}}.
+Do NOT output the "content" wrapper, and do NOT output escaped quotes or backslashes.
+Do not call the tool again.
+Do not add any commentary, analysis, explanation, or markdown.
+Your entire response must be the clean, parsed JSON object and nothing else."""
+    return LlmAgent(
+        name="data_agent",
+        model=LiteLlm(
+            model="groq/openai/gpt-oss-20b",
+            api_key=os.environ.get("GROQ_API_KEY"),
+            # Use the faster 20B model which does less heavy reasoning to prevent
+            # output truncation. Cap completion to 2000 to easily fit the JSON
+            # while keeping requests under Groq's rate limit.
+            max_tokens=2000,
+            parallel_tool_calls=False,
+        ),
+        instruction=instruction,
+        tools=[financial_data_mcp],
+        output_key="temp:financial_data",
+        before_agent_callback=cooldown_before_agent,
+        after_model_callback=mark_llm_activity,
+    )
+
+
+data_agent = create_data_agent()
